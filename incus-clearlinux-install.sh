@@ -103,7 +103,7 @@ fi
     mkdir -p /opt/incus/ui
 
     echo "Extracting Incus UI..." | tee -a "$LOG_FILE"
-    tar xvf incus-ui.tar.gz -C /opt/incus/ui
+    tar xvf incus-ui.tar.gz -C /opt/incus/
 
     echo "Removing incus-ui.tar.gz..." | tee -a "$LOG_FILE"
     rm incus-ui.tar.gz
