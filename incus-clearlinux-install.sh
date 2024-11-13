@@ -99,9 +99,6 @@ fi
     echo "Downloading Incus UI..." | tee -a "$LOG_FILE"
     curl -OL https://github.com/cmspam/incus-ui/releases/download/latest/incus-ui.tar.gz >> "$LOG_FILE" 2>&1
 
-    echo "Creating /opt/incus/ui directory..." | tee -a "$LOG_FILE"
-    mkdir -p /opt/incus/ui
-
     echo "Extracting Incus UI..." | tee -a "$LOG_FILE"
     tar xvf incus-ui.tar.gz -C /opt/incus/
 
