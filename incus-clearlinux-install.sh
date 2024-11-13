@@ -145,6 +145,7 @@ if [ -x /usr/bin/swupd ]; then
 
     echo "Creating incus-lxcfs.service file..." | tee -a "$LOG_FILE"
     cat << EOF > /etc/systemd/system/incus-lxcfs.service
+    
 [Unit]
 Description=Incus - LXCFS daemon
 ConditionVirtualization=!container
