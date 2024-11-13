@@ -111,6 +111,7 @@ if [ -x /usr/bin/swupd ]; then
     echo "#!/bin/bash" > /opt/incus/systemd/incusd
     cat /etc/bashrc >> /opt/incus/systemd/incusd
     echo "export INCUS_OVMF_PATH=/usr/share/qemu/" >> /opt/incus/systemd/incusd
+    echo "export INCUS_EDK2_PATH=/usr/share/qemu/" >> /opt/incus/systemd/incusd    
     echo "export INCUS_UI=/opt/incus/ui/" >> /opt/incus/systemd/incusd
     echo "exec incusd \"\$@\"" >> /opt/incus/systemd/incusd
 
@@ -162,4 +163,42 @@ EOF
 
     echo "Creating incus.service file..." | tee -a "$LOG_FILE"
     cat << EOF > /etc/systemd/system/incus.service
-[U
+[Unit]
+Description=Incus - Daemon
+After=network-online.target openvswitch-switch.service incus-lxcfs.service
+Requires=network-online.target incus-lxcfs.service
+
+[Service]
+ExecStart=/opt/incus/systemd/incusd --logfile /var/log/incus/incusd.log
+ExecStartPost=/opt/incus/systemd/incusd waitready --timeout=600
+KillMode=process
+TimeoutStartSec=600s
+TimeoutStopSec=30s
+Restart=on-failure
+Delegate=yes
+LimitNOFILE=1048576
+LimitNPROC=infinity
+TasksMax=infinity
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    echo "Enabling and starting incus-lxcfs service..." | tee -a "$LOG_FILE"
+    systemctl enable --now incus-lxcfs
+
+    echo "Enabling and starting incus service..." | tee -a "$LOG_FILE"
+    systemctl enable --now incus
+
+    echo "INSTALLATION IS FINISHED" | tee -a "$LOG_FILE"
+    if [ "$VERSION_TYPE" == "stable" ]; then
+        echo "Installed Incus Stable version" | tee -a "$LOG_FILE"
+    else
+        echo "Installed Incus LTS version" | tee -a "$LOG_FILE"
+    fi
+    echo "Please run 'incus admin init' and set up incus. You may need to log out and log in first." | tee -a "$LOG_FILE"
+    echo "You can examine the log file '$LOG_FILE' if anything seems wrong."
+else
+    echo "/usr/bin/swupd does not exist. Exiting."
+    exit 1
+fi
