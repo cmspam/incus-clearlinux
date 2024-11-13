@@ -1,5 +1,6 @@
 LOG_FILE="incus_install.log"
 BYPASS_PROMPT=0
+VERSION_TYPE=""
 
 if [ "$1" == "--yes" ]; then
     BYPASS_PROMPT=1
@@ -13,12 +14,40 @@ if [ -x /opt/incus/systemd/incusd ]; then
    exit 0
 fi
 
+select_version() {
+    while true; do
+        echo "Please select the version you would like to install:"
+        echo "1. Stable - The latest stable version"
+        echo "2. LTS - The long-term supported version"
+        read -p "Enter your choice (1 or 2): " version_choice
+        case $version_choice in
+            1)
+                VERSION_TYPE="stable"
+                return 0
+                ;;
+            2)
+                VERSION_TYPE="lts"
+                return 0
+                ;;
+            *)
+                echo "Invalid choice. Please enter 1 or 2."
+                ;;
+        esac
+    done
+}
+
 if [ -x /usr/bin/swupd ]; then
     if [ $BYPASS_PROMPT -eq 0 ]; then
+        select_version
+        
         echo "This script will install the following:"
         echo
         echo "1.  NixOS Package Manager (in the /nix folder)"
-        echo "2.  Incus (as a Nix package, with some other files in /opt/incus)"
+        if [ "$VERSION_TYPE" == "stable" ]; then
+            echo "2.  Incus Stable (as a Nix package, with some other files in /opt/incus)"
+        else
+            echo "2.  Incus LTS (as a Nix package, with some other files in /opt/incus)"
+        fi
         echo "3.  Incus UI (in /opt/incus/ui)"
         echo "4.  incus.service and incus-ui.service systemd services"
         echo "5.  dhcp-server, vm-host, and storage-utils packages (needed for incus functionality)"
@@ -42,21 +71,17 @@ if [ -x /usr/bin/swupd ]; then
     sh <(curl -L https://nixos.org/nix/install) --daemon --yes >> "$LOG_FILE" 2>&1
 
     echo "Adding /etc/bashrc to /etc/profile for compatibility..." | tee -a "$LOG_FILE"
-    # Check if /etc/profile exists
-if [ -f /etc/profile ]; then
-    # Create a backup of /etc/profile
-    cp /etc/profile /etc/profile.backup
-    
-    # Verify the backup was created successfully
-    if [ -f /etc/profile.backup ]; then
-        echo "Backup of /etc/profile created successfully."
+    if [ -f /etc/profile ]; then
+        cp /etc/profile /etc/profile.backup
+        if [ -f /etc/profile.backup ]; then
+            echo "Backup of /etc/profile created successfully."
+        else
+            echo "Failed to create backup of /etc/profile."
+            exit 1
+        fi
     else
-        echo "Failed to create backup of /etc/profile."
-        exit 1
+        echo "/etc/profile does not exist. No backup needed."
     fi
-else
-    echo "/etc/profile does not exist. No backup needed."
-fi
 
     cat /etc/bashrc >> /etc/profile
 
@@ -65,8 +90,13 @@ fi
     echo "Updating Nix channels..." | tee -a "$LOG_FILE"
     nix-channel --update >> "$LOG_FILE" 2>&1
 
-    echo "Installing attr, incus-lts, rsync, and lxcfs..." | tee -a "$LOG_FILE"
-    nix-env -i attr incus-lts rsync lxcfs >> "$LOG_FILE" 2>&1
+    if [ "$VERSION_TYPE" == "stable" ]; then
+        echo "Installing attr, incus, rsync, and lxcfs..." | tee -a "$LOG_FILE"
+        nix-env -i attr incus rsync lxcfs >> "$LOG_FILE" 2>&1
+    else
+        echo "Installing attr, incus-lts, rsync, and lxcfs..." | tee -a "$LOG_FILE"
+        nix-env -i attr incus-lts rsync lxcfs >> "$LOG_FILE" 2>&1
+    fi
 
     echo "Setting up /etc/subuid and /etc/subgid..." | tee -a "$LOG_FILE"
     echo "root:100000:65536" > /etc/subuid
@@ -97,19 +127,21 @@ fi
     mkdir -p /var/lib/lxcfs
 
     echo "Downloading Incus UI..." | tee -a "$LOG_FILE"
-    curl -OL https://github.com/cmspam/incus-ui/releases/download/latest/incus-ui.tar.gz >> "$LOG_FILE" 2>&1
-
-    echo "Extracting Incus UI..." | tee -a "$LOG_FILE"
-    tar xvf incus-ui.tar.gz -C /opt/incus/
-
-    echo "Removing incus-ui.tar.gz..." | tee -a "$LOG_FILE"
-    rm incus-ui.tar.gz
+    if [ "$VERSION_TYPE" == "stable" ]; then
+        curl -OL https://github.com/cmspam/incus-ui/releases/download/latest/incus-ui-stable.tar.gz >> "$LOG_FILE" 2>&1
+        tar xvf incus-ui-stable.tar.gz -C /opt/incus/
+        rm incus-ui-stable.tar.gz
+    else
+        curl -OL https://github.com/cmspam/incus-ui/releases/download/latest/incus-ui-lts.tar.gz >> "$LOG_FILE" 2>&1
+        tar xvf incus-ui-lts.tar.gz -C /opt/incus/
+        rm incus-ui-lts.tar.gz
+    fi
 
     echo "Creating /etc/systemd/system directory..." | tee -a "$LOG_FILE"
     mkdir -p /etc/systemd/system
 
-echo "Creating incus-lxcfs.service file..." | tee -a "$LOG_FILE"
-cat << EOF > /etc/systemd/system/incus-lxcfs.service
+    echo "Creating incus-lxcfs.service file..." | tee -a "$LOG_FILE"
+    cat << EOF > /etc/systemd/system/incus-lxcfs.service
 [Unit]
 Description=Incus - LXCFS daemon
 ConditionVirtualization=!container
@@ -128,39 +160,6 @@ ExecReload=/bin/kill -USR1 \$MAINPID
 WantedBy=multi-user.target
 EOF
 
-echo "Creating incus.service file..." | tee -a "$LOG_FILE"
-cat << EOF > /etc/systemd/system/incus.service
-[Unit]
-Description=Incus - Daemon
-After=network-online.target openvswitch-switch.service incus-lxcfs.service
-Requires=network-online.target incus-lxcfs.service
-
-[Service]
-ExecStart=/opt/incus/systemd/incusd --logfile /var/log/incus/incusd.log
-ExecStartPost=/opt/incus/systemd/incusd waitready --timeout=600
-KillMode=process
-TimeoutStartSec=600s
-TimeoutStopSec=30s
-Restart=on-failure
-Delegate=yes
-LimitNOFILE=1048576
-LimitNPROC=infinity
-TasksMax=infinity
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-echo "Enabling and starting incus-lxcfs service..." | tee -a "$LOG_FILE"
-systemctl enable --now incus-lxcfs
-
-echo "Enabling and starting incus service..." | tee -a "$LOG_FILE"
-systemctl enable --now incus
-
-echo "INSTALLATION IS FINISHED" | tee -a "$LOG_FILE"
-echo "Please run 'incus admin init' and set up incus. You may need to log out and log in first." | tee -a "$LOG_FILE"
-echo "You can examine the log file '$LOG_FILE' if anything seems wrong."
-else
-    echo "/usr/bin/swupd does not exist. Exiting."
-    exit 1
-fi
+    echo "Creating incus.service file..." | tee -a "$LOG_FILE"
+    cat << EOF > /etc/systemd/system/incus.service
+[U
