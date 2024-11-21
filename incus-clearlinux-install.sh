@@ -50,10 +50,11 @@ if [ -x /usr/bin/swupd ]; then
         else
             echo "2.  Incus LTS (as a Nix package, with some other files in /opt/incus)"
         fi
-        echo "3.  Incus UI (in /opt/incus/ui)"
-        echo "4.  incus.service and incus-ui.service systemd services"
-        echo "5.  dhcp-server, vm-host, and storage-utils packages (needed for incus functionality)"
-        echo "6.  lxcfs, rsync, attr with Nix (incus dependencies)"
+        echo "3.  OVMF/EDK2 with Secureboot Support (in /opt/incus/edk2)"
+        echo "4.  Incus UI (in /opt/incus/ui)"
+        echo "5.  incus.service and incus-ui.service systemd services"
+        echo "6.  dhcp-server, vm-host, and storage-utils packages (needed for incus functionality)"
+        echo "7.  lxcfs, rsync, attr with Nix (incus dependencies)"
         echo
         read -p "Do you want to continue? (N/y): " REPLY
         if [ "${REPLY,,}" != "y" ]; then
@@ -112,8 +113,8 @@ if [ -x /usr/bin/swupd ]; then
 
     echo "#!/bin/bash" > /opt/incus/systemd/incusd
     cat /etc/bashrc >> /opt/incus/systemd/incusd
-    echo "export INCUS_OVMF_PATH=/usr/share/qemu/" >> /opt/incus/systemd/incusd
-    echo "export INCUS_EDK2_PATH=/usr/share/qemu/" >> /opt/incus/systemd/incusd    
+    echo "export INCUS_OVMF_PATH=/opt/incus/edk2" >> /opt/incus/systemd/incusd
+    echo "export INCUS_EDK2_PATH=/opt/incus/edk2" >> /opt/incus/systemd/incusd    
     echo "export INCUS_UI=/opt/incus/ui/" >> /opt/incus/systemd/incusd
     echo "exec incusd \"\$@\"" >> /opt/incus/systemd/incusd
 
@@ -128,7 +129,12 @@ if [ -x /usr/bin/swupd ]; then
     echo "Creating /var/lib/incus and /var/lib/lxcfs directories..." | tee -a "$LOG_FILE"
     mkdir -p /var/lib/incus
     mkdir -p /var/lib/lxcfs
-
+    
+    echo "Downloading EDK2" | tee -a "$LOG_FILE"
+    curl -OL https://github.com/cmspam/incus-clearlinux/raw/refs/heads/main/edk2.tar.gz
+    tar xvf edk2.tar.gz -C /opt/incus
+    rm edk2.tar.gz
+    
     echo "Downloading Incus UI..." | tee -a "$LOG_FILE"
     if [ "$VERSION_TYPE" == "stable" ]; then
         curl -OL https://github.com/cmspam/incus-ui/releases/download/latest/incus-ui-stable.tar.gz >> "$LOG_FILE" 2>&1
