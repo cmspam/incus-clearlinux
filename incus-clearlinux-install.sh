@@ -113,8 +113,8 @@ if [ -x /usr/bin/swupd ]; then
 
     echo "#!/bin/bash" > /opt/incus/systemd/incusd
     cat /etc/bashrc >> /opt/incus/systemd/incusd
-    echo "export INCUS_OVMF_PATH=/opt/incus/edk2" >> /opt/incus/systemd/incusd
-    echo "export INCUS_EDK2_PATH=/opt/incus/edk2" >> /opt/incus/systemd/incusd    
+    echo "export INCUS_OVMF_PATH=/opt/incus/edk2/" >> /opt/incus/systemd/incusd
+    echo "export INCUS_EDK2_PATH=/opt/incus/edk2/" >> /opt/incus/systemd/incusd    
     echo "export INCUS_UI=/opt/incus/ui/" >> /opt/incus/systemd/incusd
     echo "exec incusd \"\$@\"" >> /opt/incus/systemd/incusd
 
